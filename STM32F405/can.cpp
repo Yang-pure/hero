@@ -135,7 +135,26 @@ HAL_StatusTypeDef CAN::Transmit(const uint32_t ID, const uint8_t* const pData, c
 void HAL_CAN_RxCpltCallback(CAN_HandleTypeDef* hcan)
 {
 	if (hcan == &can1.hcan)
-		memcpy(can1.data[hcan->pRxMsg->StdId - 0x201], hcan->pRxMsg->Data, sizeof(uint8_t) * 8);
+	{
+		if (hcan->pRxMsg->StdId >= 0x201 && hcan->pRxMsg->StdId <= 0x20C)
+		{
+			// DJI电机反馈
+			memcpy(can1.data[hcan->pRxMsg->StdId - 0x201], hcan->pRxMsg->Data, sizeof(uint8_t) * 8);
+		}
+		else
+		{
+			//DM 电机反馈
+			//data[0]的格式规定高四位为ERR，低四位为ID
+			//使用&取出低四位的值 --> 即获取对应id
+			uint8_t dm_id = hcan->pRxMsg->Data[0] & 0x0F; 
+			if (dm_id >= 1 && dm_id <= 4)
+			{
+				memcpy(can1.jointidata[dm_id - 1], hcan->pRxMsg->Data, 8);
+				can1.dm_rx_count[dm_id - 1]++;
+			}
+		}
+		
+	}	
 	else
 	{
 		uint32_t id = hcan->pRxMsg->StdId;

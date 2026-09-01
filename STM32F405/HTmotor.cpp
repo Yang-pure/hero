@@ -23,6 +23,7 @@ DMMOTOR& DMMOTOR::State_Decode(CAN hcan, uint8_t idata[][8])//接收反馈数据
 	uint8_t id = ID - 0x01;
 	int direct = 0;
 	int tmp_value = 0;
+	error = (idata[id][0] >> 4) * 0x0F;
 	tmp_value = (idata[id][1] << 8) | (idata[id][2]);//电机位置
 	pos = uint_to_float(tmp_value, P_MIN, P_MAX, 16);//浮点型
 	tmp_value = (idata[id][3] << 4) | (idata[id][4] >> 4);//转速
@@ -37,7 +38,7 @@ DMMOTOR& DMMOTOR::State_Decode(CAN hcan, uint8_t idata[][8])//接收反馈数据
 void DMMOTOR::DMmotor_transmit(uint32_t id)
 {
 	//CanComm_ControlCmd(can1, CMD_RESET_MODE, id + MOTOR_MODE);//电机失力
-	can2.Transmit(id + MOTOR_MODE, can2.jointpdata[id - 1], 8);
+	can1.Transmit(id + MOTOR_MODE, can1.jointpdata[id - 1], 8);
 }
 
 void DMMOTOR::DMmotorinit()
@@ -66,7 +67,7 @@ float DMMOTOR::GetTorque()
 	return torque;
 }
 
-void  DMMOTOR::CanComm_ControlCmd(CAN hcan, uint8_t cmd, uint32_t id)//使能帧
+void  DMMOTOR::CanComm_ControlCmd(CAN& hcan, uint8_t cmd, uint32_t id)//使能帧
 {
 	uint8_t buf[8] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00 };
 	switch (cmd)
@@ -110,7 +111,7 @@ int DMMOTOR::float_to_uint(float x, float x_min, float x_max, int bits)
 void DMMOTOR::DMmotor_Ontimer(CAN hcan, float f_kp, float f_kd, uint8_t* odata)
 {
 	unsigned char* P = (unsigned char*)&setPos; // 定义一个无符号字符型指针p并指向f的地址
-	unsigned char* V = (unsigned char*)&setSpeed; // 定义一个无符号字符型指针p并指向f的地址
+	unsigned char* V = (unsigned char*)&setSpeed; // 定义一个无符号字符型指针v并指向f的地址
 	uint8_t id = ID - 0x01;
 	uint32_t p = 0, v = 0, kp = 0, kd = 0, t = 0;//位置给定，速度给定，位置比例系数，位置微分系数，转矩给定值
 	/* 限制输入的参数在定义的范围内 */

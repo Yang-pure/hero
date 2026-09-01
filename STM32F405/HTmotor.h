@@ -56,6 +56,8 @@ public:
 
 	float angle[2]{}, setAngle{}, deltaAngle{};//认为是安装电机时，初始姿态的电机与连杆夹角；
 	float pos{}, setPos{};//转子位置，也是反馈回来的角度
+	uint8_t error{};
+	bool hold_position_captured{};
 	float curSpeed, setSpeed;
 	float current, setCurrent;
 	float torque, setTorque;
@@ -65,7 +67,7 @@ public:
 	float uint_to_float(int x_int, float x_min, float x_max, int bits);//计算用函数
 	int float_to_uint(float x, float x_min, float x_max, int bits);
 
-	void  CanComm_ControlCmd(CAN hcan, uint8_t cmd, uint32_t id);//电机模式设置
+	void  CanComm_ControlCmd(CAN& hcan, uint8_t cmd, uint32_t id);//电机模式设置
 	void  ZeroPosition(CAN hcan, uint32_t id);//校准零位置
 
 	void  Motor_Start(CAN hcan, uint32_t id);

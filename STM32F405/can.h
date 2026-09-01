@@ -43,6 +43,7 @@ public:
 	uint8_t temp_data[16];
 	uint8_t jointpdata[6][8]{};
 	uint8_t jointidata[6][8];
+	volatile uint32_t dm_rx_count[4]{};
 	CAN_HandleTypeDef hcan;
 	BaseType_t pd_Rx = false, pd_Tx = false;
 

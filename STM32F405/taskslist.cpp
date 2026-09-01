@@ -13,6 +13,23 @@
 extern float Kp = 10;
 extern float Kd = 0.6;
 extern int start_flag;
+
+enum DM_INIT_STATE
+{
+    DM_DISABLE_ALL,
+    DM_QUERY_POSITION,
+    DM_SEND_HOLD_TARGET,
+    DM_ENABLE_ALL,
+    DM_WAIT_ENABLE,
+    DM_READY,
+    DM_FAULT
+};
+
+DM_INIT_STATE dm_init_state = DM_DISABLE_ALL;
+uint8_t dm_init_index = 0;
+uint32_t dm_disable_rx_snapshot[4]{};
+uint32_t dm_enable_rx_snapshot[4]{};
+
 void TASK::Init()
 {
 	//创建开始任务
@@ -85,8 +102,21 @@ void MotorUpdateTask(void* pvParameters)
 
         for (auto& dm : DMmotor)
         {
-            dm.State_Decode(can2, can2.jointidata);
-            dm.DMmotor_Ontimer(can2, dm.Kp, dm.Kd, can2.jointpdata[dm.ID - 1]);
+            uint8_t index = dm.ID - 1;
+
+            if (can1.dm_rx_count[index] > 0)
+            {
+                dm.State_Decode(can1, can1.jointidata);
+                
+                if (!dm.hold_position_captured)
+                {
+                    dm.setPos = dm.pos;
+                    dm.setSpeed = 0.5f;
+                    dm.hold_position_captured = true;
+                }
+                dm.DMmotor_Ontimer(can1, dm.Kp, dm.Kd, can1.jointpdata[dm.ID - 1]);
+            }
+           
         }
 
 
@@ -104,6 +134,181 @@ void CanTransimtTask(void* pvParameters)
 		switch ((timer.counter++) % 3)
 		{
 		case 0:
+            if (!ctrl.init_DM)
+            {
+                switch (dm_init_state)
+                {
+                case DM_DISABLE_ALL:
+                    DMmotor[dm_init_index].CanComm_ControlCmd(can1, CMD_RESET_MODE, MOTOR_MODE + DMmotor[dm_init_index].ID);
+
+                    dm_init_index++;
+
+                    if (dm_init_index >= 4)
+                    {
+                        dm_init_index = 0;
+                        dm_init_state = DM_QUERY_POSITION;
+                    }
+                    break;
+
+                case DM_QUERY_POSITION:
+                {
+                    bool all_ready = true;
+
+                    for (uint8_t i = 0; i < 4; i++)
+                    {
+                        bool received_after_disable =
+                            can1.dm_rx_count[i] > dm_disable_rx_snapshot[i];
+
+                        if (!received_after_disable ||
+                            !DMmotor[i].hold_position_captured)
+                        {
+                            all_ready = false;
+                        }
+                        else if (DMmotor[i].error != 0)
+                        {
+                            dm_init_state = DM_FAULT;
+                            all_ready = false;
+                            break;
+                        }
+                    }
+
+                    if (dm_init_state == DM_FAULT)
+                    {
+                        break;
+                    }
+
+                    if (all_ready)
+                    {
+                        dm_init_index = 0;
+                        dm_init_state = DM_SEND_HOLD_TARGET;
+                    }
+                    else
+                    {
+                        DMmotor[dm_init_index].CanComm_ControlCmd(
+                            can1,
+                            CMD_RESET_MODE,
+                            MOTOR_MODE + DMmotor[dm_init_index].ID
+                        );
+
+                        dm_init_index++;
+
+                        if (dm_init_index >= 4)
+                        {
+                            dm_init_index = 0;
+                        }
+                    }
+                    break;
+                }
+
+                case DM_SEND_HOLD_TARGET:
+                    DMmotor[dm_init_index].DMmotor_transmit(DMmotor[dm_init_index].ID);
+
+                    dm_init_index++;
+
+                    if (dm_init_index >= 4)
+                    {
+                        dm_init_index = 0;
+                        dm_init_state = DM_ENABLE_ALL;
+                    }
+                    break;
+
+                case DM_ENABLE_ALL:
+                    if (!DMmotor[dm_init_index].hold_position_captured ||
+                        DMmotor[dm_init_index].error != 0)
+                    {
+                        dm_init_state = DM_FAULT;
+                        break;
+                    }
+
+                    dm_enable_rx_snapshot[dm_init_index] =
+                        can1.dm_rx_count[dm_init_index];
+
+                    DMmotor[dm_init_index].CanComm_ControlCmd(
+                        can1,
+                        CMD_MOTOR_MODE,
+                        MOTOR_MODE + DMmotor[dm_init_index].ID
+                    );
+
+                    dm_init_index++;
+
+                    if (dm_init_index >= 4)
+                    {
+                        dm_init_index = 0;
+                        dm_init_state = DM_WAIT_ENABLE;
+                    }
+                    break;
+                case DM_WAIT_ENABLE:
+                {
+                    bool all_enabled = true;
+
+                    for (uint8_t i = 0; i < 4; i++)
+                    {
+                        bool received_after_enable =
+                            can1.dm_rx_count[i] > dm_enable_rx_snapshot[i];
+
+                        if (!received_after_enable ||
+                            DMmotor[i].error != 1)
+                        {
+                            all_enabled = false;
+                        }
+
+                        if (received_after_enable &&
+                            DMmotor[i].error > 1)
+                        {
+                            dm_init_state = DM_FAULT;
+                            all_enabled = false;
+                            break;
+                        }
+                    }
+
+                    if (dm_init_state == DM_FAULT)
+                    {
+                        break;
+                    }
+
+                    if (all_enabled)
+                    {
+                        ctrl.init_DM = 1;
+                        dm_init_index = 0;
+                        dm_init_state = DM_READY;
+                    }
+                    else
+                    {
+                        bool current_motor_enabled =
+                            can1.dm_rx_count[dm_init_index]
+                > dm_enable_rx_snapshot[dm_init_index]
+                            && DMmotor[dm_init_index].error == 1;
+
+                        if (!current_motor_enabled)
+                        {
+                            DMmotor[dm_init_index].CanComm_ControlCmd(
+                                can1,
+                                CMD_MOTOR_MODE,
+                                MOTOR_MODE + DMmotor[dm_init_index].ID
+                            );
+                        }
+
+                        dm_init_index++;
+
+                        if (dm_init_index >= 4)
+                        {
+                            dm_init_index = 0;
+                        }
+                    }
+
+                    break;
+                }
+                case DM_READY:
+                    break;
+
+                case DM_FAULT:
+                    break;
+
+                default:
+                    break;
+                }
+            }
+
             for (auto& dm : DMmotor)
             {
                 dm.DMmotor_transmit(dm.ID);
