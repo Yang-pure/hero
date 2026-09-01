@@ -23,7 +23,7 @@ DMMOTOR& DMMOTOR::State_Decode(CAN hcan, uint8_t idata[][8])//接收反馈数据
 	uint8_t id = ID - 0x01;
 	int direct = 0;
 	int tmp_value = 0;
-	error = (idata[id][0] >> 4) * 0x0F;
+	error = (idata[id][0] >> 4) & 0x0F;
 	tmp_value = (idata[id][1] << 8) | (idata[id][2]);//电机位置
 	pos = uint_to_float(tmp_value, P_MIN, P_MAX, 16);//浮点型
 	tmp_value = (idata[id][3] << 4) | (idata[id][4] >> 4);//转速
