@@ -164,7 +164,7 @@ void CONTROL::CHASSIS::Mecanum_Resolve(
 
 	if (max_abs_speed > para.max_speed)
 	{
-		scale = para.max_speed / max_abs_speed;
+		scale = static_cast<float>(para.max_speed) / max_abs_speed;
 	}
 
 	/*
