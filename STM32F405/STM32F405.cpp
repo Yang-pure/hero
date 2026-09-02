@@ -37,9 +37,9 @@ Motor can2_motor[CAN2_MOTOR_NUM] = {
 	Motor(M3508,SPD,shooter, ID1, PID(0.f, 0.0f, 1.5f,0.f)),
 	Motor(M3508,SPD,shooter, ID2, PID(0.f, 0.0f, 1.5f,0.f)),
 	Motor(M3508,SPD,shooter, ID3, PID(0.f, 0.0f, 1.5f,0.f)),
-	Motor(M6020,POS,pantile, ID4, PID(4.3f, 0.1f, 1.f,0.f),PID(0.8f, 0.05f, 5.0f,0.f)),
+	Motor(M6020,POS,pantile, ID6, PID(4.3f, 0.1f, 1.f,0.f),PID(0.8f, 0.05f, 5.0f,0.f)),
 	Motor(M3508,POS,supply, ID5, PID(0.f, 0.0f, 1.5f,0.f)),
-	Motor(M3508,POS,pantile, ID6, PID(0.f, 0.0f, 1.5f,0.f),PID(0.8f, 0.f, 0.f,0.f))
+	Motor(M3508,POS,pantile, ID4, PID(0.f, 0.0f, 1.5f,0.f),PID(0.8f, 0.f, 0.f,0.f))
 };
 DMMOTOR DMmotor[4] = {
 	DMMOTOR(0x01, P_S, L_F),

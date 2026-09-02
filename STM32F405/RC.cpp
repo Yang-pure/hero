@@ -59,7 +59,7 @@ void RC::OnRC()
 	}
 	else if (rc.s[0] == MID && rc.s[1] == UP)
 	{
-		ctrl.mode = CONTROL::FOLLOW;
+		ctrl.mode = CONTROL::MANUAL_YAW;
 	}
 	else if (rc.s[0] == DOWN && rc.s[1] == DOWN)
 	{
@@ -119,6 +119,10 @@ void RC::OnRC()
 		{
 			ctrl.chassis.speedz = rc.ch[2] * para.rota_speed / 660.0f;
 			
+		}
+		else if (ctrl.mode == CONTROL::MANUAL_YAW)
+		{
+			ctrl.chassis.speedz = 0;
 		}
 		/*ctrl.chassis.speedx = rc.ch[1] * para.max_speed / 660.0f;
 

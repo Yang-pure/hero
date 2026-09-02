@@ -379,6 +379,23 @@ void ControlTask(void* pvParameters)
                 ctrl.pantile.yaw_hold_initialized = true;
             }
 
+            if (ctrl.mode == CONTROL::MANUAL_YAW)
+            {
+                constexpr float manual_yaw_max_rate = 90.0f; // 最大手动速度，度/秒
+                constexpr float control_period = 0.005f;     // ControlTask周期5ms
+
+                ctrl.pantile.set_yaw -=
+                    static_cast<float>(rc.rc.ch[2])
+                    / 660.0f
+                    * manual_yaw_max_rate
+                    * control_period;
+
+                ctrl.pantile.set_yaw =
+                    ctrl.GetDelta(ctrl.pantile.set_yaw);
+            }
+
+
+
             /*
              * 1. 底盘旋转指令前馈
              *

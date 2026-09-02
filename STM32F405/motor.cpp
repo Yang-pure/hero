@@ -131,7 +131,7 @@ void Motor::Ontimer(uint8_t idata[][8], uint8_t* odata)//idate: receive;odate: t
 		position_error = getdeltaa(setangle - angle[now]);
 
 		setspeed = pid[position].Position(position_error, 10000) + speed_feedforward;
-		setspeed = setrange(setspeed, 5000);
+		setspeed = setrange(setspeed, 1500);
 
 		setcurrent = pid[speed].Position(setspeed - curspeed, 10000);
 		 

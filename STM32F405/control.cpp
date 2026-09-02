@@ -77,7 +77,7 @@ void CONTROL::PANTILE::Keep_Pantile(float angleKeep,PANTILE::TYPE type,IMU& fram
 		 * 当前世界Yaw误差，而不会因为mark_yaw冻结，
 		 * 变成旧机械角度误差。
 		 */
-		if (ctrl.mode == CONTROL::ROTATION)
+		if (ctrl.mode == CONTROL::ROTATION || ctrl.mode == CONTROL::MANUAL_YAW)
 		{
 			mark_yaw =ctrl.pantile_motor[YAW]->angle[now] + delta;
 		}

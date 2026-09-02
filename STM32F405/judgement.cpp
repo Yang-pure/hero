@@ -303,7 +303,7 @@ void Judgement::DisplpayMode(uint8_t mode)
 		modeChar[3] = 'A';
 	}
 	break;
-	case CONTROL::MODE::SEPARATE:
+	case CONTROL::MODE::MANUAL_YAW:
 	{
 		modeChar[0] = 'S';
 		modeChar[1] = 'E';

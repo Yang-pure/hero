@@ -16,7 +16,9 @@ public:
 	Motor* shooter_motor[SHOOTER_MOTOR_NUM]{};
 	Motor* supply_motor[SUPPLY_MOTOR_NUM]{};
 	
-	enum MODE { ROTATION, RESET, SEPARATE, FOLLOW, LOCK, TEST, AUTO } mode;
+	enum MODE { ROTATION, RESET, MANUAL_YAW, FOLLOW, LOCK, TEST, AUTO } ;
+
+	MODE mode = RESET;
 	struct CHASSIS
 	{
 		PID chassis_reset{};
