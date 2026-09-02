@@ -15,7 +15,7 @@ void CONTROL::Init(std::vector<Motor*> motor)
 			break;
 		case(function_type::pantile):
 			pantile_motor[num2++] = motor[i];
-			break;
+			break;  
 		case(function_type::shooter):
 			shooter_motor[num3++] = motor[i];
 			break;
@@ -59,7 +59,7 @@ void CONTROL::PANTILE::Keep_Pantile(float angleKeep,PANTILE::TYPE type,IMU& fram
 		/*
 		 * 转成GM6020编码值。
 		 */
-		delta = degreeToMechanical(yaw_error_degree);
+		delta = -degreeToMechanical(yaw_error_degree);
 
 		if (delta <= -4096.0f)
 		{
@@ -77,7 +77,7 @@ void CONTROL::PANTILE::Keep_Pantile(float angleKeep,PANTILE::TYPE type,IMU& fram
 		 * 当前世界Yaw误差，而不会因为mark_yaw冻结，
 		 * 变成旧机械角度误差。
 		 */
-		if (ctrl.mode == CONTROL::ROTATION || ctrl.mode == CONTROL::MANUAL_YAW)
+		if (ctrl.mode == CONTROL::ROTATION || ctrl.mode == CONTROL::MANUAL_YAW || ctrl.mode == CONTROL::FOLLOW)
 		{
 			mark_yaw =ctrl.pantile_motor[YAW]->angle[now] + delta;
 		}

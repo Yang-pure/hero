@@ -13,6 +13,7 @@
 extern float Kp = 10;
 extern float Kd = 0.6;
 extern int start_flag;
+volatile float yaw_angle_plot = 0.0f;
 
 enum DM_INIT_STATE
 {
@@ -99,6 +100,8 @@ void MotorUpdateTask(void* pvParameters)
 		for (auto& motor : can1_motor)motor.Ontimer(can1.data, can1.temp_data);
 
 		for (auto& motor : can2_motor)motor.Ontimer(can2.data, can2.temp_data);
+
+        yaw_angle_plot = can2_motor[3].angle[now] / 400.0f;
 
         for (auto& dm : DMmotor)
         {
@@ -405,9 +408,10 @@ void ControlTask(void* pvParameters)
              */
             float command_feedforward = 0.0f;
 
-            if (ctrl.mode == CONTROL::ROTATION)
+            if (ctrl.mode == CONTROL::ROTATION || ctrl.mode == CONTROL::FOLLOW)
             {
-                command_feedforward =ctrl.pantile.yaw_cmd_ff_k  * ctrl.chassis.speedz;
+                command_feedforward =
+                    ctrl.pantile.yaw_cmd_ff_k * ctrl.chassis.speedz;
             }
 
             /*

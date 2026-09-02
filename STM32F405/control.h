@@ -60,8 +60,8 @@ public:
  *
  * 两个系数的正负方向必须通过实车确认。
  */
-		float yaw_cmd_ff_k = -0.02f;
-		float yaw_gyro_fb_k = -0.05f;
+		float yaw_cmd_ff_k = 0.015f;
+		float yaw_gyro_fb_k = -0.0f;
 
 		float yaw_speed_ff{};
 		float yaw_speed_ff_target{};

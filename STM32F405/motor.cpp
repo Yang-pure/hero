@@ -128,19 +128,98 @@ void Motor::Ontimer(uint8_t idata[][8], uint8_t* odata)//idate: receive;odate: t
 	}
 	else if (mode == POS)
 	{
+		// 位置外环：角度误差 → 目标速度
 		position_error = getdeltaa(setangle - angle[now]);
 
-		setspeed = pid[position].Position(position_error, 10000) + speed_feedforward;
+		setspeed =
+			pid[position].Position(position_error, 10000)
+			+ speed_feedforward;
+
 		setspeed = setrange(setspeed, 1500);
 
-		setcurrent = pid[speed].Position(setspeed - curspeed, 10000);
-		 
+		// 速度内环：速度误差 → 目标电流
+		setcurrent =
+			pid[speed].Position(setspeed - curspeed, 10000);
+
+		// 只对Yaw GM6020增加摩擦补偿
+		if (type == M6020 && function == pantile)
+		{
+			bool in_jam_zone =
+				angle[now] >= 6000.0f
+				|| angle[now] <= 1600.0f;
+
+			constexpr int32_t yaw_motion_current_ff = 4000;
+			constexpr int32_t jam_current_ff = 1500;
+
+			if (setspeed > 1)
+			{
+				// 整圈基础静摩擦补偿
+				setcurrent += yaw_motion_current_ff+350;
+
+				// 固定高阻力区额外补偿
+				if (in_jam_zone)
+				{
+					setcurrent += jam_current_ff;
+				}
+			}
+			else if (setspeed < -3)
+			{
+				setcurrent -= yaw_motion_current_ff;
+
+				if (in_jam_zone)
+				{
+					setcurrent -= jam_current_ff;
+				}
+			}
+
+			setcurrent = setrange(setcurrent, 8000);
+		}
 	}
+
 	else if (mode == SPD)
 	{
 		setcurrent = pid[speed].Position(setspeed - curspeed, 10000);
-		 
+		////   双MID立即清零，作为恒流测试的紧急停止
+		//if (rc.rc.s[0] == RC::MID
+		//	&& rc.rc.s[1] == RC::MID)
+		//{
+		//	setcurrent = 0;
+		//}
+		//else
+		//{
+		//	// 临时将testspeed作为恒定电流指令
+		//	setcurrent = testspeed;
+		//}
 	}
+
+	/*
+ * Yaw 6020固定机械阻力区补偿。
+ * 当前卡涩区跨越编码器零点：
+ * [6000, 8191] ∪ [0, 1600]
+ */
+	//if (type == M6020 && function == pantile)
+	//{
+	//	bool in_jam_zone =
+	//		angle[now] >= 6000.0f
+	//		|| angle[now] <= 1600.0f;
+
+	//	if (in_jam_zone)
+	//	{
+	//		constexpr int32_t jam_current_ff = 1500;
+
+	//		if (setspeed > 3)
+	//		{
+	//			setcurrent += jam_current_ff;
+	//		}
+	//		else if (setspeed < -3)
+	//		{
+	//			setcurrent -= jam_current_ff;
+	//		}
+	//	}
+
+	//	// Yaw调试期间的独立安全限流
+	//	setcurrent = setrange(setcurrent, 8000);
+	//}
 	
 	GetDistanceFromMechanicalAngle();
 	angle[pre] = angle[now];
