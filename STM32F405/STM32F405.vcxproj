@@ -50,7 +50,6 @@
   <ItemGroup>
     <ClCompile Include="can.cpp" />
     <ClCompile Include="control.cpp" />
-    <ClCompile Include="feeder.cpp" />
     <ClInclude Include="feeder.h" />
     <ClInclude Include="feeder_command.h" />
     <ClCompile Include="CRC.cpp" />

@@ -16,7 +16,7 @@ public:
 	Motor* shooter_motor[SHOOTER_MOTOR_NUM]{};
 	Motor* supply_motor[SUPPLY_MOTOR_NUM]{};
 	
-	enum MODE { ROTATION, RESET, MANUAL_YAW, FOLLOW, LOCK, TEST, AUTO, FIRE } ;
+	enum MODE { ROTATION, RESET, MANUAL_YAW, FOLLOW, LOCK, TEST, AUTO, SHOOT } ;
 
 	MODE mode = RESET;
 	struct CHASSIS
@@ -72,14 +72,45 @@ public:
 
 	struct SHOOTER
 	{
-		float now_bullet_speed = 0.f;
+		// 当前拨弹方向：1或-1
+		float direction_trigger = 0.0f;
+
+		float now_bullet_speed = 0.0f;
+
+		// 单发通道上一周期状态，用于检测上升沿
+		bool last_single_trigger = false;
 
 		bool auto_shoot = false;
-		bool openRub = false, supply_bullet = false;
+		bool openRub = false;
+		bool supply_bullet = false;
 		bool fraction = false;
 		bool fullheat_shoot = false;
 		bool heat_ulimit = false;
-		int16_t shoot_speed = 6000;
+
+		// 单发锁存：松开摇杆后，也要完成当前一次推弹流程
+		bool single_latch = false;
+
+		// 保留参考工程参数
+		int16_t shoot_speed = 600;
+
+		enum PushState
+		{
+			WAIT,       // 等待弹丸到达微动开关
+			PUSHING,    // 电推杆正在推出
+			BACK        // 电推杆已经释放，等待机械回位
+		};
+
+		PushState push_state = WAIT;
+
+		// 状态切换时间，单位ms
+		uint32_t push_timer = 0;
+
+		// 电推杆高电平保持50ms
+		static constexpr uint32_t PUSH_HOLD_TIME = 50;
+
+		// 拉低后等待30ms再进行下一发
+		static constexpr uint32_t RETRACT_WAIT_TIME = 30;
+
 		void Update();
 	};
 

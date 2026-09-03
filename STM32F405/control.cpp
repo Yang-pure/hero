@@ -2,6 +2,8 @@
 #include "tim.h"
 #include "judgement.h"
 #include "HTmotor.h"
+#include "RC.h"
+#include "gpio.h"
 
 void CONTROL::Init(std::vector<Motor*> motor)
 {
@@ -192,8 +194,8 @@ void CONTROL::CHASSIS::Mecanum_Resolve(
 
 void CONTROL::CHASSIS::Update()
 {
-	// FIRE模式锁住底盘三轴目标为0，避免双DOWN供弹时底盘跟随右摇杆运动。
-	if (ctrl.mode == RESET || ctrl.mode == FIRE)
+	// RESET和SHOOT模式下，底盘四轮目标速度强制归零
+	if (ctrl.mode == RESET || ctrl.mode == SHOOT)
 	{
 		speedx = 0;
 		speedy = 0;
@@ -226,24 +228,237 @@ void CONTROL::PANTILE::Update()
 
 void CONTROL::SHOOTER::Update()
 {
-	//now_bullet_speed = judgement.data.ext_shoot_data_t.bullet_speed;
-	if (ctrl.mode == RESET)
+	/*
+	 * 使用功能指针，不直接使用参考工程的can2_motor数组下标。
+	 *
+	 * 参考工程：
+	 * can2_motor[1..3] = 摩擦轮
+	 *
+	 * 当前主工程：
+	 * can2_motor[0..2] = 摩擦轮
+	 * can2_motor[3]    = Yaw
+	 * can2_motor[4]    = 拨弹轮
+	 * can2_motor[5]    = Pitch
+	 *
+	 * 使用shooter_motor和supply_motor后，CAN2数组顺序变化不会影响发射逻辑。
+	 */
+	Motor* friction_motor_1 = ctrl.shooter_motor[0];
+	Motor* friction_motor_2 = ctrl.shooter_motor[1];
+	Motor* friction_motor_3 = ctrl.shooter_motor[2];
+	Motor* feeder_motor = ctrl.supply_motor[0];
+
+	/*
+	 * 只允许SHOOT模式驱动发射机构。
+	 *
+	 * 参考工程只在RESET时清零，但当前主工程还有ROTATION、
+	 * FOLLOW、MANUAL_YAW等模式。如果从SHOOT直接切换到这些模式，
+	 * 必须清除上一周期目标，防止摩擦轮或拨弹轮继续运转。
+	 */
+	if (ctrl.mode != CONTROL::SHOOT)
 	{
-		openRub = false;
 		supply_bullet = false;
-		auto_shoot = false;
+		push_state = WAIT;
+		push_timer = 0;
+
+		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_9, GPIO_PIN_RESET);
+
+		direction_trigger = 0.0f;
+
+		friction_motor_1->setspeed = 0.0f;
+		friction_motor_2->setspeed = 0.0f;
+		friction_motor_3->setspeed = 0.0f;
+		feeder_motor->setspeed = 0.0f;
+
+		last_single_trigger = false;
+		single_latch = false;
+
+		return;
 	}
-	if (openRub)
+
+	/*
+	 * 进入SHOOT模式后，三摩擦轮持续转动。
+	 * 转向和速度完全采用参考发射工程。
+	 */
+	friction_motor_1->setspeed = -2000.0f;
+	friction_motor_2->setspeed = 2000.0f;
+	friction_motor_3->setspeed = -2000.0f;
+
+	/*
+	 * ch[3]：连发
+	 * ch[2]：单发
+	 *
+	 * 摇杆正负方向同时决定拨弹轮正反转。
+	 */
+	const int16_t ch_burst = rc.rc.ch[3];
+	const int16_t ch_single = rc.rc.ch[2];
+
+	bool burst_trigger = false;
+	bool single_trigger = false;
+
+	if (ch_burst >= 500 && ch_burst <= 660)
 	{
-
+		burst_trigger = true;
+		direction_trigger = 1.0f;
 	}
-	else
+	else if (ch_burst <= -500 && ch_burst >= -660)
 	{
-
+		burst_trigger = true;
+		direction_trigger = -1.0f;
 	}
 
-	// 供弹轮唯一写入者是MotorUpdateTask中的FEEDER::Update；此处不再写第二份目标。
-	// 这样手动供弹不会被SHOOTER逻辑覆盖，也没有启用自动拨弹。
+	if (ch_single >= 500 && ch_single <= 660)
+	{
+		single_trigger = true;
+		direction_trigger = 1.0f;
+	}
+	else if (ch_single <= -500 && ch_single >= -660)
+	{
+		single_trigger = true;
+		direction_trigger = -1.0f;
+	}
+
+	/*
+	 * 单发采用上升沿触发。
+	 * 摇杆一直停在触发位置时，不会反复产生新的单发命令。
+	 */
+	const bool single_rising =
+		single_trigger && !last_single_trigger;
+
+	last_single_trigger = single_trigger;
+
+	if (single_rising)
+	{
+		single_latch = true;
+	}
+
+	const bool shoot_cmd =
+		single_rising || burst_trigger;
+
+	/*
+	 * 单发锁存有效时，即使摇杆已经回中，
+	 * 也要继续完成当前这一发。
+	 */
+	const bool firing =
+		shoot_cmd || single_latch;
+
+	if (firing)
+	{
+		supply_bullet = true;
+	}
+	else if (push_state == WAIT)
+	{
+		supply_bullet = false;
+	}
+
+	if (!supply_bullet)
+	{
+		feeder_motor->setspeed = 0.0f;
+		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_9, GPIO_PIN_RESET);
+
+		push_state = WAIT;
+		push_timer = 0;
+		return;
+	}
+
+	const bool bullet_detected =
+		HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_8) == GPIO_PIN_SET;
+
+	const uint32_t now_tick = HAL_GetTick();
+
+	switch (push_state)
+	{
+	case WAIT:
+		/*
+		 * 微动开关尚未触发时，拨弹轮继续送料。
+		 */
+		feeder_motor->setspeed =
+			300.0f * direction_trigger;
+
+		/*
+		 * PA8为高：弹丸已经到达推杆位置。
+		 * 先停拨弹轮，再推出电推杆。
+		 */
+		if (bullet_detected && firing)
+		{
+			feeder_motor->setspeed = 0.0f;
+
+			HAL_GPIO_WritePin(
+				GPIOC,
+				GPIO_PIN_9,
+				GPIO_PIN_SET);
+
+			push_state = PUSHING;
+			push_timer = now_tick;
+		}
+		break;
+
+	case PUSHING:
+		/*
+		 * 推杆推出期间禁止拨弹轮继续送料。
+		 */
+		feeder_motor->setspeed = 0.0f;
+
+		if (now_tick - push_timer >= PUSH_HOLD_TIME)
+		{
+			HAL_GPIO_WritePin(
+				GPIOC,
+				GPIO_PIN_9,
+				GPIO_PIN_RESET);
+
+			push_state = BACK;
+			push_timer = now_tick;
+		}
+		break;
+
+	case BACK:
+		/*
+		 * PC9已经拉低，等待推杆机械回位。
+		 */
+		feeder_motor->setspeed = 0.0f;
+
+		if (now_tick - push_timer >= RETRACT_WAIT_TIME)
+		{
+			push_state = WAIT;
+			push_timer = 0;
+
+			/*
+			 * 连发保持时，回到WAIT后继续送料。
+			 */
+			feeder_motor->setspeed =
+				300.0f * direction_trigger;
+
+			/*
+			 * 不是连发，就表示当前单发已经完成。
+			 */
+			if (!burst_trigger)
+			{
+				single_latch = false;
+			}
+
+			/*
+			 * 当前既没有新的单发沿，也没有连发命令，
+			 * 完成这一发后停止送料。
+			 */
+			if (!shoot_cmd)
+			{
+				supply_bullet = false;
+			}
+		}
+		break;
+
+	default:
+		feeder_motor->setspeed = 0.0f;
+
+		HAL_GPIO_WritePin(
+			GPIOC,
+			GPIO_PIN_9,
+			GPIO_PIN_RESET);
+
+		push_state = WAIT;
+		push_timer = 0;
+		supply_bullet = false;
+		break;
+	}
 }
 
 float CONTROL::CHASSIS::Ramp(float setval, float curval, uint32_t RampSlope)
