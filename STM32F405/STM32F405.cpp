@@ -26,6 +26,9 @@
 #include "led.h"
 #include "HTmotor.h"
 #include "Power_read.h"
+#include "gpio.h"
+
+
 
 Motor can1_motor[CAN1_MOTOR_NUM] = {
 	Motor(M3508,SPD,chassis, ID5, PID(10.f, 0.0f, 1.5f,0.f)),
@@ -34,15 +37,23 @@ Motor can1_motor[CAN1_MOTOR_NUM] = {
 	Motor(M3508,SPD,chassis, ID8, PID(10.f, 0.0f, 1.5f,0.f))
 };
 Motor can2_motor[CAN2_MOTOR_NUM] = {
-	Motor(M3508,SPD,shooter, ID1, PID(0.f, 0.0f, 1.5f,0.f)),
-	Motor(M3508,SPD,shooter, ID2, PID(0.f, 0.0f, 1.5f,0.f)),
-	Motor(M3508,SPD,shooter, ID3, PID(0.f, 0.0f, 1.5f,0.f)),
-	Motor(M6020,POS,pantile, ID6, PID(75.0f, 0.0f, 0.f,0.f),PID(0.05f, 0.00f, 0.0f,0.f)),
-	// 供弹轮 can2_motor[4]：独立速度环，P=20、I=0.1、D=1.5，微分滤波系数为0。
-	// 右摇杆竖直方向只生成目标转速；FEEDER再按反馈转速计算电流，具体流程见feeder.cpp。
-	// 速度/方向见feeder_command.h，电流限幅见feeder.h，FIRE入口见RC.cpp/control.cpp。
-	Motor(M3508,SPD,supply, ID5, PID(20.f, 0.1f, 1.5f,0.f)),
-	Motor(M3508,POS,pantile, ID4, PID(0.f, 0.0f, 1.5f,0.f),PID(0.8f, 0.f, 0.f,0.f))
+	// 三个摩擦轮：采用参考发射工程的速度环参数
+	Motor(M3508, SPD, shooter, ID1, PID(1.0f, 0.0f, 0.0f, 0.0f)),
+	Motor(M3508, SPD, shooter, ID2, PID(1.0f, 0.0f, 0.0f, 0.0f)),
+	Motor(M3508, SPD, shooter, ID3, PID(1.0f, 0.0f, 0.0f, 0.0f)),
+
+	// Yaw：完整保留你原来的 GM6020 参数
+	Motor(M6020, POS, pantile, ID6,
+		PID(75.0f, 0.0f, 0.0f, 0.0f),
+		PID(0.05f, 0.00f, 0.0f, 0.0f)),
+
+		// 拨弹轮：采用参考发射工程参数
+		Motor(M3508, SPD, supply, ID5, PID(20.0f, 0.1f, 0.0f, 0.0f)),
+
+		// Pitch：本次完全保持原样
+		Motor(M3508, POS, pantile, ID4,
+			PID(0.0f, 0.0f, 1.5f, 0.0f),
+			PID(0.8f, 0.0f, 0.0f, 0.0f))
 };
 DMMOTOR DMmotor[4] = {
 	DMMOTOR(0x01, P_S, L_F),
@@ -75,15 +86,24 @@ int main(void)
 	//HAL_CAN_Start(&hcan1);
 	//HAL_CAN_ActivateNotification(&hcan1, CAN_IT_RX_FIFO0_MSG_PENDING);
 
+	// 发射机构微动开关：PA8，高电平表示检测到弹丸
+	GPIO_Init(GPIOA, GPIO_MODE_INPUT, GPIO_PULLDOWN, GPIO_PIN_8);
+
+	// 发射机构电推杆：PC9，高电平推出，低电平收回
+	GPIO_Init(GPIOC, GPIO_MODE_OUTPUT_PP, GPIO_NOPULL, GPIO_PIN_9);
+
+	// 上电时先确保推杆处于释放/收回状态
+	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_9, GPIO_PIN_RESET);
+
 	can2.Init(CAN2);
 	timer.Init(BASE, TIM3, 1000).BaseInit();
 	imu_pantile.Init(&uart4, UART4, 115200, CH010);
-	rc.Init(&uart6, USART6, 100000);
+	rc.Init(&uart3, USART3, 100000);
 //	power.Init(&uart5,UART5,9600);
 
 	para.Init();
 	ctrl.Init(std::vector<Motor*>{
-		&can1_motor[0], // 底盘 ID5
+			&can1_motor[0], // 底盘 ID5
 			& can1_motor[1], // 底盘 ID6
 			& can1_motor[2], // 底盘 ID7
 			& can1_motor[3], // 底盘 ID8
@@ -91,10 +111,9 @@ int main(void)
 			& can2_motor[0], // 摩擦轮 ID1
 			& can2_motor[1], // 摩擦轮 ID2
 			& can2_motor[2], // 摩擦轮 ID3
-
-			& can2_motor[3], // ID4 M6020，云台 YAW
-			& can2_motor[4], // ID5 M3508，拨弹 supply
-			& can2_motor[5], // ID6 M3508，云台 PITCH
+			& can2_motor[3], // GM6020 Yaw，ID6
+			& can2_motor[4], // M3508 拨弹轮，ID5
+			& can2_motor[5], // M3508 Pitch，ID4
 	});
 	//});
 	//ctrl.Init(std::vector<Motor*>{

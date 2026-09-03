@@ -3,7 +3,7 @@
 #include "HTmotor.h"
 #include "imu.h"
 #include "RC.h"
-#include "feeder.h"
+
 #define DEG_TO_RAD 0.017453292f  // π / 180
 Motor::Motor(const motor_type type, const motor_mode mode, const function_type function, const uint32_t id, PID _speed, PID _position, PID _speed2)
 	: ID(id)
@@ -179,22 +179,13 @@ void Motor::Ontimer(uint8_t idata[][8], uint8_t* odata)//idate: receive;odate: t
 
 	else if (mode == SPD)
 	{
-		if (function == supply)
-			// ID5供弹轮由FEEDER统一完成使能、速度PID、限流和停止保护。
-			feeder.Update(*this);
-		else
-			setcurrent = pid[speed].Position(setspeed - curspeed, 10000);
-		////   双MID立即清零，作为恒流测试的紧急停止
-		//if (rc.rc.s[0] == RC::MID
-		//	&& rc.rc.s[1] == RC::MID)
-		//{
-		//	setcurrent = 0;
-		//}
-		//else
-		//{
-		//	// 临时将testspeed作为恒定电流指令
-		//	setcurrent = testspeed;
-		//}
+		/*
+		 * 所有SPD电机统一执行速度闭环。
+		 *
+		 * 底盘、摩擦轮、拨弹轮分别使用自己的PID实例，
+		 * 因此虽然共用计算代码，参数和积分历史不会互相影响。
+		 */
+		setcurrent = pid[speed].Position(setspeed - curspeed, 10000);
 	}
 
 	/*

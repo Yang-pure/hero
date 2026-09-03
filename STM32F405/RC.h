@@ -22,6 +22,8 @@ public:
 	bool top_mode = true;
 	bool fix = false;
 
+	
+
 	struct
 	{
 		int16_t ch[4];
@@ -43,7 +45,7 @@ public:
 	bool judement_start = false;
 	void Decode();
 	void OnRC();
-	bool UpdateFireMode();
+	
 	void OnPC();
 	void Update();
 	void Init(UART* huart, USART_TypeDef* Instance, const uint32_t BaudRate);

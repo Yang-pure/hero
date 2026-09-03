@@ -642,9 +642,6 @@
     <ClCompile Include="control.cpp">
       <Filter>Source files\Src\user</Filter>
     </ClCompile>
-    <ClCompile Include="feeder.cpp">
-      <Filter>Source files\Src\user</Filter>
-    </ClCompile>
     <ClCompile Include="CRC.cpp">
       <Filter>Source files\Src\user</Filter>
     </ClCompile>

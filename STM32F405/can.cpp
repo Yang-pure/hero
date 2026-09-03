@@ -1,5 +1,4 @@
 #include "can.h"
-#include "feeder.h"
 #include "label.h"
 #include "string.h"
 
@@ -167,10 +166,7 @@ void HAL_CAN_RxCpltCallback(CAN_HandleTypeDef* hcan)
 		{
 			memcpy(can2.data[id - 0x201], hcan->pRxMsg->Data, 8);
 			// 0x205是供弹轮ID5：有效标准数据帧到达后只更新时间戳，不在中断里运行PID。
-			if (hcan == &can2.hcan && id == 0x205 &&
-				hcan->pRxMsg->IDE == CAN_ID_STD &&
-				hcan->pRxMsg->RTR == CAN_RTR_DATA && hcan->pRxMsg->DLC == 8)
-				feeder.OnFeedback(HAL_GetTick());
+			
 		}
 	}
 
