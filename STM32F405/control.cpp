@@ -192,7 +192,8 @@ void CONTROL::CHASSIS::Mecanum_Resolve(
 
 void CONTROL::CHASSIS::Update()
 {
-	if (ctrl.mode == RESET)
+	// FIRE模式锁住底盘三轴目标为0，避免双DOWN供弹时底盘跟随右摇杆运动。
+	if (ctrl.mode == RESET || ctrl.mode == FIRE)
 	{
 		speedx = 0;
 		speedy = 0;
@@ -241,23 +242,8 @@ void CONTROL::SHOOTER::Update()
 
 	}
 
-	if (supply_bullet && openRub)
-	{
-		if (auto_shoot)
-		{
-			ctrl.supply_motor[0]->setspeed = 2160;
-			ctrl.supply_motor[0]->spinning = true;
-		}
-		else
-		{
-			ctrl.supply_motor[0]->setspeed = 2160;
-			ctrl.supply_motor[0]->spinning = true;
-		}
-	}
-	else 
-	{
-		ctrl.supply_motor[0]->spinning = false;
-	}
+	// 供弹轮唯一写入者是MotorUpdateTask中的FEEDER::Update；此处不再写第二份目标。
+	// 这样手动供弹不会被SHOOTER逻辑覆盖，也没有启用自动拨弹。
 }
 
 float CONTROL::CHASSIS::Ramp(float setval, float curval, uint32_t RampSlope)

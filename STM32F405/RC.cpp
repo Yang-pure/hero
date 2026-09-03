@@ -1,6 +1,7 @@
 #include "label.h"
 #include "RC.h"
 #include "control.h"
+#include "feeder.h"
 
 void RC::Decode()
 {
@@ -11,6 +12,7 @@ void RC::Decode()
 		pd_Rx = xQueueReceive(*queueHandler, m_frame, NULL);
 	}
 
+	if (pd_Rx != pdTRUE) return; // no stale frame counted as a new command
 	if (sizeof(m_frame) < 18) return;
 	if ((m_frame[0] | m_frame[1] | m_frame[2] | m_frame[3] | m_frame[4] | m_frame[5]) == 0)return;
 
@@ -38,11 +40,12 @@ void RC::Decode()
 	pc.key_h = m_frame[15];//按键的高位部分R F G Z X C 
 	pc.key_l = m_frame[14];//按键的低8位 W S A D SHIFT CTRL Q E
 
-	
+	feeder.UpdateCommand(rc.s[0], rc.s[1], rc.ch[1], HAL_GetTick());
 }
 
 void RC::OnRC()
 {
+	if (UpdateFireMode()) return;
 
 	if (rc.s[0] == MID && rc.s[1] == MID)
 	{
@@ -60,17 +63,6 @@ void RC::OnRC()
 	else if (rc.s[0] == MID && rc.s[1] == UP)
 	{
 		ctrl.mode = CONTROL::MANUAL_YAW;
-	}
-	else if (rc.s[0] == DOWN && rc.s[1] == DOWN)
-	{
-		if (abs(rc.ch[0]) > 330)
-		{
-			ctrl.shooter.openRub = true;
-		}
-		else
-		{
-			ctrl.shooter.openRub = false;
-		}
 	}
 	else if (rc.s[0] == DOWN && rc.s[1] == UP)
 	{
@@ -142,6 +134,25 @@ void RC::Update()
 {
 	OnRC();
 	OnPC();
+}
+
+bool RC::UpdateFireMode()
+{
+	// 双DOWN是纯供弹模式：底盘目标清零，右摇杆竖直轴交给FEEDER，返回后不再执行旧底盘映射。
+	const bool fire_selected = rc.s[0] == DOWN && rc.s[1] == DOWN;
+	if (!fire_selected)
+	{
+		// 离开双DOWN后不能残留FIRE；FEEDER随后会因非FIRE而清零输出。
+		if (ctrl.mode == CONTROL::FIRE) ctrl.mode = CONTROL::RESET;
+		return false;
+	}
+	ctrl.mode = CONTROL::FIRE;
+	ctrl.chassis.speedx = 0;
+	ctrl.chassis.speedy = 0;
+	ctrl.chassis.speedz = 0;
+	// 横向通道仍保留原摩擦轮开关；它不参与供弹轮的竖直速度目标。
+	ctrl.shooter.openRub = abs(rc.ch[0]) > 330;
+	return true;
 }
 
 

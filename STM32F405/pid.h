@@ -63,6 +63,13 @@ public:
 		return result;
 	}
 	float m_Kp, m_Ti, m_Td;
+	void Reset()
+	{
+		for (auto& error : m_error) error = 0.0f;
+		m_lderivative = 0.0f;
+		for (auto& sample : m_filter) sample = 0.0f;
+		m_filterindex = 0;
+	}
 	float max_limit = 1000.0f;
 	float m_error[3] = { 0 };
 private:

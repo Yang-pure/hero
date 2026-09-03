@@ -642,6 +642,9 @@
     <ClCompile Include="control.cpp">
       <Filter>Source files\Src\user</Filter>
     </ClCompile>
+    <ClCompile Include="feeder.cpp">
+      <Filter>Source files\Src\user</Filter>
+    </ClCompile>
     <ClCompile Include="CRC.cpp">
       <Filter>Source files\Src\user</Filter>
     </ClCompile>
@@ -690,6 +693,12 @@
       <Filter>Header files\Inc\device</Filter>
     </ClInclude>
     <ClInclude Include="control.h">
+      <Filter>Header files\Inc\user</Filter>
+    </ClInclude>
+    <ClInclude Include="feeder.h">
+      <Filter>Header files\Inc\user</Filter>
+    </ClInclude>
+    <ClInclude Include="feeder_command.h">
       <Filter>Header files\Inc\user</Filter>
     </ClInclude>
     <ClInclude Include="CRC.h">

@@ -38,7 +38,10 @@ Motor can2_motor[CAN2_MOTOR_NUM] = {
 	Motor(M3508,SPD,shooter, ID2, PID(0.f, 0.0f, 1.5f,0.f)),
 	Motor(M3508,SPD,shooter, ID3, PID(0.f, 0.0f, 1.5f,0.f)),
 	Motor(M6020,POS,pantile, ID6, PID(75.0f, 0.0f, 0.f,0.f),PID(0.05f, 0.00f, 0.0f,0.f)),
-	Motor(M3508,POS,supply, ID5, PID(0.f, 0.0f, 1.5f,0.f)),
+	// 供弹轮 can2_motor[4]：独立速度环，P=20、I=0.1、D=1.5，微分滤波系数为0。
+	// 右摇杆竖直方向只生成目标转速；FEEDER再按反馈转速计算电流，具体流程见feeder.cpp。
+	// 速度/方向见feeder_command.h，电流限幅见feeder.h，FIRE入口见RC.cpp/control.cpp。
+	Motor(M3508,SPD,supply, ID5, PID(20.f, 0.1f, 1.5f,0.f)),
 	Motor(M3508,POS,pantile, ID4, PID(0.f, 0.0f, 1.5f,0.f),PID(0.8f, 0.f, 0.f,0.f))
 };
 DMMOTOR DMmotor[4] = {
@@ -74,9 +77,9 @@ int main(void)
 
 	can2.Init(CAN2);
 	timer.Init(BASE, TIM3, 1000).BaseInit();
-	imu_pantile.Init(&uart2, USART2, 115200, CH010);
-	rc.Init(&uart1, USART1, 100000);
-	power.Init(&uart5,UART5,9600);
+	imu_pantile.Init(&uart4, UART4, 115200, CH010);
+	rc.Init(&uart6, USART6, 100000);
+//	power.Init(&uart5,UART5,9600);
 
 	para.Init();
 	ctrl.Init(std::vector<Motor*>{
