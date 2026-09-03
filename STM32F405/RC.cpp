@@ -113,7 +113,16 @@ void RC::OnRC()
 
 	if (Shift_mode())
 	{
-		// 保持你原来的空逻辑
+		/*
+		 * 模式切换时，让 Pitch 目标从当前实际位置开始，
+		 * 防止沿用旧目标造成突然运动。
+		 */
+		Motor* pitch =ctrl.pantile_motor[CONTROL::PANTILE::PITCH];
+
+		if (pitch->continuous_initialized)
+		{
+			ctrl.pantile.mark_pitch =(float)pitch->sum_angle;
+		}
 	}
 
 	if (ctrl.mode == CONTROL::RESET)

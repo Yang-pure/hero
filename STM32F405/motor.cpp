@@ -98,6 +98,16 @@ void Motor::Ontimer(uint8_t idata[][8], uint8_t* odata)//idate: receive;odate: t
 	}*/
 	//----------------------------------------------------------------
 	//20220121--hz
+
+	if (continuous_position && !continuous_initialized)
+	{
+		// 第一次初始化时，以当前机械角作为连续位置起点
+		angle[pre] = angle[now];
+		sum_angle = angle[now];
+		setangle = (float)sum_angle;
+		continuous_initialized = true;
+	}
+
 	recorded_the_Laps();
 	if (mode == ACE)
 	{
@@ -129,18 +139,24 @@ void Motor::Ontimer(uint8_t idata[][8], uint8_t* odata)//idate: receive;odate: t
 	}
 	else if (mode == POS)
 	{
-		// 位置外环：角度误差 → 目标速度
-		position_error = getdeltaa(setangle - angle[now]);
+		// Pitch 使用连续多圈位置；Yaw 继续使用原单圈角度
+		if (continuous_position)
+		{
+			position_error = (int32_t)(setangle - (float)sum_angle);
+		}
+		else
+		{
+			position_error = getdeltaa(setangle - angle[now]);
+		}
 
-		setspeed =
-			pid[position].Position(position_error, 10000)
-			+ speed_feedforward;
+		setspeed =pid[position].Position(position_error, 10000) + speed_feedforward;
 
-		setspeed = setrange(setspeed, 1500);
+		// 连续位置模式目前只由 Pitch 使用
+		// Pitch 沿用参考工程的 500，Yaw 保持原来的 1500
+		setspeed = setrange(setspeed,continuous_position ? 500 : 1500);
 
 		// 速度内环：速度误差 → 目标电流
-		setcurrent =
-			pid[speed].Position(setspeed - curspeed, 10000);
+		setcurrent = pid[speed].Position(setspeed - curspeed, 10000);
 
 		// 只对Yaw GM6020增加摩擦补偿
 		if (type == M6020 && function == pantile)

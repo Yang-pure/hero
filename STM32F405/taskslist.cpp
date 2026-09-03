@@ -384,17 +384,42 @@ void ControlTask(void* pvParameters)
 
             if (ctrl.mode == CONTROL::MANUAL_YAW)
             {
-                constexpr float manual_yaw_max_rate = 90.0f; // 最大手动速度，度/秒
-                constexpr float control_period = 0.005f;     // ControlTask周期5ms
+                constexpr float manual_yaw_max_rate = 90.0f;
+                constexpr float control_period = 0.005f;
 
-                ctrl.pantile.set_yaw -=
-                    static_cast<float>(rc.rc.ch[2])
-                    / 660.0f
-                    * manual_yaw_max_rate
-                    * control_period;
+                /*
+                 * 右摇杆横向 ch[2] 控制 Yaw。
+                 * 只有绝对值严格大于 100 才更新目标。
+                 */
+                if (rc.rc.ch[2] > 100
+                    || rc.rc.ch[2] < -100)
+                {
+                    ctrl.pantile.set_yaw -=
+                        static_cast<float>(rc.rc.ch[2])
+                        / 660.0f
+                        * manual_yaw_max_rate
+                        * control_period;
 
-                ctrl.pantile.set_yaw =
-                    ctrl.GetDelta(ctrl.pantile.set_yaw);
+                    ctrl.pantile.set_yaw =
+                        ctrl.GetDelta(
+                            ctrl.pantile.set_yaw
+                        );
+                }
+
+                /*
+                 * 右摇杆竖向 ch[3] 控制 Pitch。
+                 * 只有绝对值严格大于 100 才更新目标。
+                 */
+                if (rc.rc.ch[3] > 100
+                    || rc.rc.ch[3] < -100)
+                {
+                    ctrl.Control_Pantile(
+                        0,
+                        rc.rc.ch[3]
+                        * para.pitch_speed
+                        / 660.f
+                    );
+                }
             }
 
 
