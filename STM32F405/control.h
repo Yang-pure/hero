@@ -36,6 +36,10 @@ public:
 		float mark_pitch{}, mark_yaw{};
 		float base_mark_yaw{};      // YAW基准位置（进入保持模式时的电机角度）
 		float base_mark_pitch{};    // PITCH基准位置
+
+		// Pitch 连续位置基准
+		float pitch_home{};
+		bool pitch_position_initialized = false;
 		// control.h
 		PID pantile_PID[3] = { {0.5f, 0.01f, 0.f}, {0.5f, 0.01f, 0.f}, {0.f, 0.f, 0.f} };
 		// 或

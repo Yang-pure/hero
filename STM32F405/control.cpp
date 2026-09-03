@@ -34,12 +34,15 @@ void CONTROL::Init(std::vector<Motor*> motor)
 	pantile_motor[PANTILE::TYPE::PITCH]->setangle = para.initial_pitch;
 	pantile.mark_yaw = para.initial_yaw;
 	pantile_motor[PANTILE::TYPE::YAW]->setangle = para.initial_yaw;
+
+	// 只给 Pitch 启用连续多圈位置
+	pantile_motor[PANTILE::TYPE::PITCH]->continuous_position = true;
 }
 
 
 void CONTROL::Control_Pantile(int32_t ch_yaw, int32_t ch_pitch)
 {
-	ch_pitch *= (-1.f);
+	ch_pitch *= (-10.f);
 	ch_yaw *= (1.f);//方向相反修改这里正负
 	float adjangle = this->pantile.sensitivity * 2;
 
@@ -201,29 +204,74 @@ void CONTROL::CHASSIS::Update()
 		speedy = 0;
 		speedz = 0;
 	}
-	
-	Mecanum_Resolve(speedx, speedy, speedz);
 
+	Mecanum_Resolve(speedx, speedy, speedz);
 }
 
 void CONTROL::PANTILE::Update()
 {
+	Motor* pitch =
+		ctrl.pantile_motor[PANTILE::PITCH];
+
+	/*
+	 * Pitch 使用连续编码器位置。
+	 * 初始化完成后，以当前 sum_angle 作为本次上电的 home。
+	 */
+	if (pitch->continuous_position
+		&& pitch->continuous_initialized
+		&& !pitch_position_initialized)
+	{
+		pitch_home = (float)pitch->sum_angle;
+		base_mark_pitch = pitch_home;
+		mark_pitch = pitch_home;
+		pitch_position_initialized = true;
+	}
+
 	if (ctrl.mode == RESET)
 	{
+		// Yaw 的原 RESET 逻辑保持不变
 		mark_yaw = para.initial_yaw;
-		mark_pitch = para.initial_pitch;
 
-		// 下次离开RESET时重新记录当前IMU角度
+		// Pitch 回到本次上电记录的 home
+		if (pitch_position_initialized)
+		{
+			mark_pitch = pitch_home;
+		}
+
 		yaw_hold_initialized = false;
 	}
 
-	if (mark_yaw > 8192.0)mark_yaw -= 8192.0;
-	if (mark_yaw < 0.0)mark_yaw += 8192.0;
+	// Yaw 继续使用原来的 0～8192 单圈处理
+	if (mark_yaw > 8192.0f)
+	{
+		mark_yaw -= 8192.0f;
+	}
 
-	mark_pitch = std::max(std::min(mark_pitch, para.pitch_max), para.pitch_min);
+	if (mark_yaw < 0.0f)
+	{
+		mark_yaw += 8192.0f;
+	}
 
-	ctrl.pantile_motor[PANTILE::YAW]->setangle = mark_yaw;
-	//ctrl.pantile_motor[PANTILE::PITCH]->setangle = mark_pitch;
+	ctrl.pantile_motor[PANTILE::YAW]->setangle =
+		mark_yaw;
+
+	// Pitch 使用相对于上电 home 的连续位置限位
+	if (pitch_position_initialized)
+	{
+		const float pitch_low =
+			pitch_home + para.pitch_min;
+
+		const float pitch_high =
+			pitch_home + para.pitch_max;
+
+		mark_pitch =
+			std::max(
+				std::min(mark_pitch, pitch_high),
+				pitch_low
+			);
+
+		pitch->setangle = mark_pitch;
+	}
 }
 
 void CONTROL::SHOOTER::Update()

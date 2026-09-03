@@ -43,17 +43,13 @@ Motor can2_motor[CAN2_MOTOR_NUM] = {
 	Motor(M3508, SPD, shooter, ID3, PID(1.0f, 0.0f, 0.0f, 0.0f)),
 
 	// Yaw：完整保留你原来的 GM6020 参数
-	Motor(M6020, POS, pantile, ID6,
-		PID(75.0f, 0.0f, 0.0f, 0.0f),
-		PID(0.05f, 0.00f, 0.0f, 0.0f)),
+	Motor(M6020, POS, pantile, ID6,PID(75.0f, 0.0f, 0.0f, 0.0f),PID(0.05f, 0.00f, 0.0f, 0.0f)),
 
 		// 拨弹轮：采用参考发射工程参数
-		Motor(M3508, SPD, supply, ID5, PID(20.0f, 0.1f, 0.0f, 0.0f)),
+	Motor(M3508, SPD, supply, ID5, PID(20.0f, 0.1f, 0.0f, 0.0f)),
 
-		// Pitch：本次完全保持原样
-		Motor(M3508, POS, pantile, ID4,
-			PID(0.0f, 0.0f, 1.5f, 0.0f),
-			PID(0.8f, 0.0f, 0.0f, 0.0f))
+		// Pitch：采用已完成 Pitch 工程的双环 PID
+	Motor(M3508, POS, pantile, ID4, PID(20.0f, 0.0f, 1.5f, 0.0f), PID(0.25f, 0.0f, 0.0f, 0.1f))
 };
 DMMOTOR DMmotor[4] = {
 	DMMOTOR(0x01, P_S, L_F),

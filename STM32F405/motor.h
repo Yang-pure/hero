@@ -58,6 +58,11 @@ public:
 	int32_t mode{};
 	int round_count;
 	bool pd = 0, spinning = 0, position_initialized{};//pd:单次拨弹 spinning:一秒八发
+
+	// 多圈位置控制，仅给 Pitch 启用
+	bool continuous_position = false;
+	bool continuous_initialized = false;
+
 	PID pid[2];
 	float Torque_constant_2006 = (0.18*10)/10000;
 	float setangle{}, angle[2]{},distance{}, initial_x{}, rota_angle{}, reset_rota_angle{}, delta_angle{};
