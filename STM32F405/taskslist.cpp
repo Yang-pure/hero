@@ -10,9 +10,12 @@
 #include "delay.h"
 #include "HTmotor.h"
 #include "Power_read.h"
+#include "xuc.h"
 extern float Kp = 10;
 extern float Kd = 0.6;
 extern int start_flag;
+// Live Watch观测变量
+volatile float yaw_speed_plot = 0.0f;
 volatile float yaw_angle_plot = 0.0f;
 
 enum DM_INIT_STATE
@@ -99,9 +102,18 @@ void MotorUpdateTask(void* pvParameters)
 	
 		for (auto& motor : can1_motor)motor.Ontimer(can1.data, can1.temp_data);
 
-		for (auto& motor : can2_motor)motor.Ontimer(can2.data, can2.temp_data);
+        for (auto& motor : can2_motor)
+        {
+            motor.Ontimer(can2.data, can2.temp_data);
+        }
 
-        yaw_angle_plot = can2_motor[3].angle[now] / 400.0f;
+        // CAN2数组下标3是Yaw电机
+        // 两个变量在同一个电机控制周期内更新
+        yaw_speed_plot =
+            static_cast<float>(can2_motor[3].curspeed);
+
+        yaw_angle_plot =
+            static_cast<float>(can2_motor[3].angle[now]) / 400.0f;
 
         for (auto& dm : DMmotor)
         {
@@ -345,7 +357,44 @@ void ControlTask(void* pvParameters)
          */
         rc.Update();
 
-        Motor* yaw_motor = ctrl.pantile_motor[CONTROL::PANTILE::YAW];
+        Motor* yaw_motor =
+            ctrl.pantile_motor[CONTROL::PANTILE::YAW];
+
+        Motor* pitch_motor =
+            ctrl.pantile_motor[CONTROL::PANTILE::PITCH];
+
+        static CONTROL::MODE previous_mode = CONTROL::RESET;
+
+        if (ctrl.mode != previous_mode)
+        {
+            // 锁存当前Yaw世界角度和机械角度
+            ctrl.pantile.set_yaw =
+                imu_pantile.GetAngleYaw();
+
+            ctrl.pantile.mark_yaw =
+                yaw_motor->angle[now];
+
+            ctrl.pantile.base_mark_yaw =
+                ctrl.pantile.mark_yaw;
+
+            // 锁存当前Pitch连续机械角度
+            if (pitch_motor->continuous_initialized)
+            {
+                ctrl.pantile.mark_pitch =
+                    static_cast<float>(pitch_motor->sum_angle);
+
+                ctrl.pantile.base_mark_pitch =
+                    ctrl.pantile.mark_pitch;
+            }
+
+            // 清除上一模式的Yaw前馈
+            ctrl.pantile.yaw_speed_ff = 0.0f;
+            ctrl.pantile.yaw_speed_ff_target = 0.0f;
+            yaw_motor->speed_feedforward = 0.0f;
+
+            ctrl.pantile.yaw_hold_initialized =
+                ctrl.mode != CONTROL::RESET;
+        }
 
         if (ctrl.mode == CONTROL::RESET)
         {
@@ -384,40 +433,37 @@ void ControlTask(void* pvParameters)
 
             if (ctrl.mode == CONTROL::MANUAL_YAW)
             {
-                constexpr float manual_yaw_max_rate = 90.0f;
+                constexpr float manual_yaw_max_rate_degree = 240.0f;
                 constexpr float control_period = 0.005f;
+                constexpr float encoder_per_degree =
+                    8192.0f / 360.0f;
 
                 /*
-                 * 右摇杆横向 ch[2] 控制 Yaw。
-                 * 只有绝对值严格大于 100 才更新目标。
+                 * 测试位置环时，摇杆直接修改机械编码器目标。
+                 * 摇杆归中后 mark_yaw 保持不变。
                  */
-                if (rc.rc.ch[2] > 100
-                    || rc.rc.ch[2] < -100)
+                if (rc.rc.ch[2] > 100 ||
+                    rc.rc.ch[2] < -100)
                 {
-                    ctrl.pantile.set_yaw -=
+                    ctrl.pantile.mark_yaw +=
                         static_cast<float>(rc.rc.ch[2])
                         / 660.0f
-                        * manual_yaw_max_rate
-                        * control_period;
-
-                    ctrl.pantile.set_yaw =
-                        ctrl.GetDelta(
-                            ctrl.pantile.set_yaw
-                        );
+                        * manual_yaw_max_rate_degree
+                        * control_period
+                        * encoder_per_degree;
                 }
 
                 /*
                  * 右摇杆竖向 ch[3] 控制 Pitch。
-                 * 只有绝对值严格大于 100 才更新目标。
                  */
-                if (rc.rc.ch[3] > 100
-                    || rc.rc.ch[3] < -100)
+                if (rc.rc.ch[3] > 100 ||
+                    rc.rc.ch[3] < -100)
                 {
                     ctrl.Control_Pantile(
                         0,
                         rc.rc.ch[3]
                         * para.pitch_speed
-                        / 660.f
+                        / 660.0f
                     );
                 }
             }
@@ -432,35 +478,34 @@ void ControlTask(void* pvParameters)
              * 就提前命令Yaw电机向反方向旋转。
              */
             float command_feedforward = 0.0f;
+            float gyro_feedback = 0.0f;
 
-            if (ctrl.mode == CONTROL::ROTATION || ctrl.mode == CONTROL::FOLLOW)
+            if (ctrl.mode == CONTROL::ROTATION ||
+                ctrl.mode == CONTROL::FOLLOW)
             {
                 command_feedforward =
-                    ctrl.pantile.yaw_cmd_ff_k * ctrl.chassis.speedz;
+                    ctrl.pantile.yaw_cmd_ff_k *
+                    ctrl.chassis.speedz;
+
+                gyro_feedback =
+                    ctrl.pantile.yaw_gyro_fb_k *
+                    imu_pantile.GetAngularVelocityYaw();
             }
 
-            /*
-             * 2. IMU世界角速度补偿
-             *
-             * 当云台已经被底盘带动时，
-             * 不需要等待世界角度误差继续积累，
-             * 直接根据Yaw角速度增加反向速度。
-             */
-            float gyro_feedback =ctrl.pantile.yaw_gyro_fb_k * imu_pantile.GetAngularVelocityYaw();
-
-            ctrl.pantile.yaw_speed_ff_target = command_feedforward + gyro_feedback;
+            ctrl.pantile.yaw_speed_ff_target =
+                command_feedforward + gyro_feedback;
 
             /*
              * 前馈限幅。
              * 初期建议限制在±300以内。
              */
-            if (ctrl.pantile.yaw_speed_ff_target> ctrl.pantile.yaw_ff_limit)
+            if (ctrl.pantile.yaw_speed_ff_target > ctrl.pantile.yaw_ff_limit)
             {
-                ctrl.pantile.yaw_speed_ff_target =ctrl.pantile.yaw_ff_limit;
+                ctrl.pantile.yaw_speed_ff_target = ctrl.pantile.yaw_ff_limit;
             }
-            else if (ctrl.pantile.yaw_speed_ff_target< -ctrl.pantile.yaw_ff_limit)
+            else if (ctrl.pantile.yaw_speed_ff_target < -ctrl.pantile.yaw_ff_limit)
             {
-                ctrl.pantile.yaw_speed_ff_target =-ctrl.pantile.yaw_ff_limit;
+                ctrl.pantile.yaw_speed_ff_target = -ctrl.pantile.yaw_ff_limit;
             }
 
             /*
@@ -479,14 +524,31 @@ void ControlTask(void* pvParameters)
             /*
              * 原世界角度保持逻辑不变。
              */
-            ctrl.pantile.Keep_Pantile( ctrl.pantile.set_yaw, CONTROL::PANTILE::YAW, imu_pantile );
+            if (ctrl.mode == CONTROL::MANUAL_YAW)
+            {
+                // 纯机械位置环测试时关闭世界角速度前馈
+                ctrl.pantile.yaw_speed_ff = 0.0f;
+                ctrl.pantile.yaw_speed_ff_target = 0.0f;
+                yaw_motor->speed_feedforward = 0.0f;
+            }
+            else
+            {
+                ctrl.pantile.Keep_Pantile(
+                    ctrl.pantile.set_yaw,
+                    CONTROL::PANTILE::YAW,
+                    imu_pantile
+                );
+            }
         }
 
         ctrl.pantile.Update();
         ctrl.chassis.Update();
         ctrl.shooter.Update();
+        xuc.Encode();
 
-        vTaskDelayUntil(&xLastWakeTime,pdMS_TO_TICKS(5));
+        previous_mode = ctrl.mode;
+
+        vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(5));
     }
 }
 
@@ -498,6 +560,7 @@ void DecodeTask(void* pvParameters)
 		rc.Decode();
 
 		imu_pantile.Decode();
+		xuc.Decode();
 	
 		vTaskDelay(5);
 	}

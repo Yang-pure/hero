@@ -45,6 +45,26 @@ void RC::Decode()
 
 void RC::OnRC()
 {
+
+	/*
+	 * 任意拨杆挡位发生变化时，
+	 * 将当前Pitch实际位置作为新目标位置。
+	 */
+	if (Shift_mode())
+	{
+		Motor* pitch_motor =
+			ctrl.pantile_motor[CONTROL::PANTILE::PITCH];
+
+		if (pitch_motor->continuous_initialized)
+		{
+			ctrl.pantile.mark_pitch =
+				static_cast<float>(pitch_motor->sum_angle);
+
+			ctrl.pantile.base_mark_pitch =
+				ctrl.pantile.mark_pitch;
+		}
+	}
+
 	/*
 	 * 双DOWN进入完整发射模式。
 	 *
@@ -111,19 +131,7 @@ void RC::OnRC()
 		// 暂未定义，保持你原来的空逻辑
 	}
 
-	if (Shift_mode())
-	{
-		/*
-		 * 模式切换时，让 Pitch 目标从当前实际位置开始，
-		 * 防止沿用旧目标造成突然运动。
-		 */
-		Motor* pitch =ctrl.pantile_motor[CONTROL::PANTILE::PITCH];
-
-		if (pitch->continuous_initialized)
-		{
-			ctrl.pantile.mark_pitch =(float)pitch->sum_angle;
-		}
-	}
+	
 
 	if (ctrl.mode == CONTROL::RESET)
 	{
@@ -148,7 +156,7 @@ void RC::OnRC()
 		else if (ctrl.mode == CONTROL::FOLLOW)
 		{
 			ctrl.chassis.speedz =
-				rc.ch[2] * para.rota_speed / 660.0f;
+				-rc.ch[2] * para.rota_speed / 660.0f;
 		}
 		else if (ctrl.mode == CONTROL::MANUAL_YAW)
 		{

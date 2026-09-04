@@ -139,69 +139,201 @@ void Motor::Ontimer(uint8_t idata[][8], uint8_t* odata)//idate: receive;odate: t
 	}
 	else if (mode == POS)
 	{
-		// Pitch 使用连续多圈位置；Yaw 继续使用原单圈角度
+		// Pitch 使用连续多圈位置；Yaw 使用单圈最短路径位置误差
 		if (continuous_position)
 		{
-			position_error = (int32_t)(setangle - (float)sum_angle);
+			position_error =
+				static_cast<int32_t>(setangle - static_cast<float>(sum_angle));
 		}
 		else
 		{
 			position_error = getdeltaa(setangle - angle[now]);
 		}
 
-		setspeed =pid[position].Position(position_error, 10000) + speed_feedforward;
+		// 位置外环：位置误差 -> 目标速度
+		setspeed =
+			pid[position].Position(position_error, 10000) +
+			speed_feedforward;
 
-		// 连续位置模式目前只由 Pitch 使用
-		// Pitch 沿用参考工程的 500，Yaw 保持原来的 1500
-		setspeed = setrange(setspeed,continuous_position ? 500 : 1500);
+		// Pitch 保持原来的500；
+		// Yaw初次调位置环时限制在±50，避免突然高速运动
+		setspeed = setrange(
+			setspeed,
+			continuous_position ? 500 : 50
+		);
 
-		// 速度内环：速度误差 → 目标电流
-		setcurrent = pid[speed].Position(setspeed - curspeed, 10000);
+		// 速度内环：目标速度与实际速度误差 -> 电流
+		setcurrent =
+			pid[speed].Position(setspeed - curspeed, 10000);
 
-		// 只对Yaw GM6020增加摩擦补偿
+		// Yaw GM6020分区摩擦补偿
 		if (type == M6020 && function == pantile)
 		{
-			bool in_jam_zone =
-				angle[now] >= 6000.0f
-				|| angle[now] <= 1600.0f;
+			/*
+			 * 这些补偿是在约20rpm下标定的。
+			 * 目标速度低于20rpm时按比例加入，避免低速时补偿过大。
+			 */
+			float yaw_ff_scale =
+				fabs(static_cast<float>(setspeed)) / 20.0f;
 
-			constexpr int32_t yaw_motion_current_ff = 4000;
-			constexpr int32_t jam_current_ff = 1500;
-
-			if (setspeed > 1)
+			if (yaw_ff_scale > 1.0f)
 			{
-				// 整圈基础静摩擦补偿
-				setcurrent += yaw_motion_current_ff+350;
-
-				// 固定高阻力区额外补偿
-				if (in_jam_zone)
-				{
-					setcurrent += jam_current_ff;
-				}
-			}
-			else if (setspeed < -3)
-			{
-				setcurrent -= yaw_motion_current_ff;
-
-				if (in_jam_zone)
-				{
-					setcurrent -= jam_current_ff;
-				}
+				yaw_ff_scale = 1.0f;
 			}
 
-			setcurrent = setrange(setcurrent, 8000);
+			if (setspeed > 0)
+			{
+				setcurrent += static_cast<int32_t>(
+					5000.0f * yaw_ff_scale
+					);
+
+				if (angle[now] >= 6000.0f)
+				{
+					setcurrent += static_cast<int32_t>(
+						1500.0f * yaw_ff_scale
+						);
+				}
+				else if (angle[now] <= 2200.0f)
+				{
+					setcurrent += static_cast<int32_t>(
+						2500.0f * yaw_ff_scale
+						);
+				}
+				else if (angle[now] >= 3600.0f &&
+					angle[now] <= 5600.0f)
+				{
+					setcurrent += static_cast<int32_t>(
+						500.0f * yaw_ff_scale
+						);
+				}
+			}
+			else if (setspeed < 0)
+			{
+				setcurrent -= static_cast<int32_t>(
+					5000.0f * yaw_ff_scale
+					);
+
+				if (angle[now] >= 6000.0f)
+				{
+					setcurrent -= static_cast<int32_t>(
+						1700.0f * yaw_ff_scale
+						);
+				}
+				else if (angle[now] <= 800.0f)
+				{
+					setcurrent -= static_cast<int32_t>(
+						2300.0f * yaw_ff_scale
+						);
+				}
+				else if (angle[now] >= 3200.0f &&
+					angle[now] <= 5600.0f)
+				{
+					setcurrent -= static_cast<int32_t>(
+						1600.0f * yaw_ff_scale
+						);
+				}
+
+				if (angle[now] >= 6800.0f &&
+					angle[now] <= 8000.0f)
+				{
+					setcurrent -= static_cast<int32_t>(
+						900.0f * yaw_ff_scale
+						);
+				}
+
+				if (angle[now] >= 4000.0f &&
+					angle[now] <= 5600.0f)
+				{
+					setcurrent -= static_cast<int32_t>(
+						800.0f * yaw_ff_scale
+						);
+				}
+
+				// 此区间原先反向速度偏快，适当削弱负向电流
+				if (angle[now] >= 1200.0f &&
+					angle[now] <= 2600.0f)
+				{
+					setcurrent += static_cast<int32_t>(
+						1200.0f * yaw_ff_scale
+						);
+				}
+			}
+
+			setcurrent = setrange(setcurrent, 16000);
 		}
 	}
 
 	else if (mode == SPD)
 	{
-		/*
-		 * 所有SPD电机统一执行速度闭环。
-		 *
-		 * 底盘、摩擦轮、拨弹轮分别使用自己的PID实例，
-		 * 因此虽然共用计算代码，参数和积分历史不会互相影响。
-		 */
-		setcurrent = pid[speed].Position(setspeed - curspeed, 10000);
+		if (type == M6020 && function == pantile)
+		{
+			//// Yaw 恒定输出测试：
+			//// testspeed 临时作为输出指令，不再表示目标转速。
+			//// 绕过速度 PID，保留原来的 ±16000 输出限幅。
+			//setcurrent = testspeed;
+			// Yaw速度环测试：testspeed表示目标转速。
+			setspeed = testspeed;
+
+			// PID根据目标速度与实际速度的差值，增减输出。
+			setcurrent = pid[speed].Position(setspeed - curspeed, 10000);
+
+			// 暂时保留5000作为正反向基准输出。
+			// 目标为0时不加基准，PID仍可对残余转速产生制动输出。
+			if (setspeed > 0)
+				setcurrent += 5000;
+			else if (setspeed < 0)
+				setcurrent -= 5000;
+			// 正方向补偿：跨零前保持1500，跨零后先提高到2000。
+			// 正方向分区补偿，反方向不受影响。
+			if (testspeed > 0)
+			{
+				// 跨零前。
+				if (angle[now] >= 6000.0f)
+					setcurrent += 1500;
+
+				// 跨零后：2500暂时保留，不再提高。
+				else if (angle[now] <= 2200.0f)
+					setcurrent += 2500;
+
+				// 另一侧低速区：显示角度9～14，先试补500。
+				else if (angle[now] >= 3600.0f &&
+					angle[now] <= 5600.0f)
+					setcurrent += 500;
+			}
+			else if (testspeed < 0)
+			{
+				// 基础补偿。
+				if (angle[now] >= 6000.0f)
+					setcurrent -= 1700;
+				else if (angle[now] <= 800.0f)
+					setcurrent -= 2300;  // 0°附近：保持
+				else if (angle[now] >= 3200.0f &&
+					angle[now] <= 5600.0f)
+					setcurrent -= 1600;
+
+				// 60°附近：额外补偿600改为900。
+				// 总补偿1700 + 900 = 2600。
+				if (angle[now] >= 6800.0f && angle[now] <= 8000.0f)
+					setcurrent -= 900;
+
+				// 180°附近：额外补偿500改为800。
+				// 总补偿1600 + 800 = 2400。
+				if (angle[now] >= 4000.0f && angle[now] <= 5600.0f)
+					setcurrent -= 800;
+
+				// 约263°～325°：覆盖270°这一侧的较快区。
+// 反向输出为负，加300表示减小驱动，不是加速。
+				if (angle[now] >= 1200.0f && angle[now] <= 2600.0f)
+					setcurrent += 1200;
+			}
+
+			setcurrent = setrange(setcurrent, 16000);
+		}
+		else
+		{
+			// 其他电机仍按原来的目标速度运行，不受 Yaw 测试影响。
+			setcurrent = pid[speed].Position(setspeed - curspeed, 10000);
+		}
 	}
 
 	/*

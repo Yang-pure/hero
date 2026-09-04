@@ -223,21 +223,16 @@ void CONTROL::PANTILE::Update()
 	{
 		pitch_home = (float)pitch->sum_angle;
 		base_mark_pitch = pitch_home;
-		mark_pitch = pitch_home;
+		/*mark_pitch = pitch_home;*/
 		pitch_position_initialized = true;
 	}
 
 	if (ctrl.mode == RESET)
 	{
-		// Yaw 的原 RESET 逻辑保持不变
-		mark_yaw = para.initial_yaw;
-
-		// Pitch 回到本次上电记录的 home
-		if (pitch_position_initialized)
-		{
-			mark_pitch = pitch_home;
-		}
-
+		/*
+		 * Yaw和Pitch目标已经在模式切换瞬间锁存，
+		 * RESET中不要再覆盖目标位置。
+		 */
 		yaw_hold_initialized = false;
 	}
 
@@ -327,9 +322,10 @@ void CONTROL::SHOOTER::Update()
 	 * 进入SHOOT模式后，三摩擦轮持续转动。
 	 * 转向和速度完全采用参考发射工程。
 	 */
-	friction_motor_1->setspeed = -2000.0f;
-	friction_motor_2->setspeed = 2000.0f;
-	friction_motor_3->setspeed = -2000.0f;
+	 // 三摩擦轮目标转速，保留原来的旋转方向
+	friction_motor_1->setspeed = -4000.0f;
+	friction_motor_2->setspeed = 4000.0f;
+	friction_motor_3->setspeed = -4000.0f;
 
 	/*
 	 * ch[3]：连发

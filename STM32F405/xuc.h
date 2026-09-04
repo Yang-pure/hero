@@ -25,13 +25,28 @@ struct TxPacket
 struct RxPacket
 {
 	uint8_t header = 0xA5;
-
+	float pitch;
+	float yaw;
+	float yaw_diff;
+	float pitch_diff;
+	float distance;
+	uint8_t fireadvice;
+	uint8_t reserved[3];
+	float v_y;
 	uint16_t checksum = 0;
-};
+}__attribute__((packed));
+
+// NUC -> STM32 protocol v2:
+// [0..28] payload, [29..30] CRC16 (little-endian).
+// Keeping the checksum after v_y avoids the old 29-byte layout conflict where
+// bytes 27..28 were both part of v_y and treated as the checksum.
+static_assert(sizeof(RxPacket) == 31, "XUC control frame must be 31 bytes");
 
 class XUC
 {
 public:
+	static constexpr uint32_t CONTROL_FRAME_LEN = 31;
+	static constexpr uint32_t LEGACY_CONTROL_FRAME_LEN = 29;
 
 	TxPacket TxNuc;
 	RxPacket RxNuc;
@@ -52,7 +67,8 @@ public:
 	float x, y, z;
 	float vx, vy, vz;
 
-	bool track_flag;
+	bool track_flag = false;
+	TickType_t last_valid_rx_tick = 0;
 	bool test_navigation = false;
 
 

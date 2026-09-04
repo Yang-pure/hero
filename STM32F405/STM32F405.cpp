@@ -27,6 +27,7 @@
 #include "HTmotor.h"
 #include "Power_read.h"
 #include "gpio.h"
+#include "xuc.h"
 
 
 
@@ -43,7 +44,7 @@ Motor can2_motor[CAN2_MOTOR_NUM] = {
 	Motor(M3508, SPD, shooter, ID3, PID(1.0f, 0.0f, 0.0f, 0.0f)),
 
 	// Yaw：完整保留你原来的 GM6020 参数
-	Motor(M6020, POS, pantile, ID6,PID(75.0f, 0.0f, 0.0f, 0.0f),PID(0.05f, 0.00f, 0.0f, 0.0f)),
+	Motor(M6020, POS, pantile, ID6,PID(99.66f, 0.47f, 0.0f, 0.0f),PID(0.05f, 0.00f, 0.0f, 0.0f)),
 
 		// 拨弹轮：采用参考发射工程参数
 	Motor(M3508, SPD, supply, ID5, PID(20.0f, 0.1f, 0.0f, 0.0f)),
@@ -71,6 +72,7 @@ TASK task;
 CONTROL ctrl;
 Judgement judgement;
 PARAMETER para;
+XUC xuc;
 
 
 int main(void)
@@ -93,8 +95,9 @@ int main(void)
 
 	can2.Init(CAN2);
 	timer.Init(BASE, TIM3, 1000).BaseInit();
-	imu_pantile.Init(&uart4, UART4, 115200, CH010);
-	rc.Init(&uart3, USART3, 100000);
+	imu_pantile.Init(&uart1, USART1, 115200, CH010);
+	rc.Init(&uart4, UART4, 100000);
+	xuc.Init(&uart3, USART3, 460800);
 //	power.Init(&uart5,UART5,9600);
 
 	para.Init();
