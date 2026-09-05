@@ -395,6 +395,9 @@ void ControlTask(void* pvParameters)
             ctrl.pantile.yaw_hold_initialized =
                 ctrl.mode != CONTROL::RESET;
         }
+        const bool xuc_tracking =
+            xuc.track_flag &&
+            ctrl.mode != CONTROL::RESET;
 
         if (ctrl.mode == CONTROL::RESET)
         {
@@ -431,7 +434,7 @@ void ControlTask(void* pvParameters)
                 ctrl.pantile.yaw_hold_initialized = true;
             }
 
-            if (ctrl.mode == CONTROL::MANUAL_YAW)
+            if (ctrl.mode == CONTROL::MANUAL_YAW && !xuc_tracking)
             {
                 constexpr float manual_yaw_max_rate_degree = 240.0f;
                 constexpr float control_period = 0.005f;
@@ -520,11 +523,28 @@ void ControlTask(void* pvParameters)
              */
             yaw_motor->speed_feedforward =
                 ctrl.pantile.yaw_speed_ff;
+            if (xuc_tracking)
+            {
+                ctrl.pantile.set_yaw =
+                    ctrl.GetDelta(xuc.yaw);
 
+                ctrl.pantile.Keep_Pantile(
+                    xuc.pitch * 180.0f / PI,
+                    CONTROL::PANTILE::PITCH,
+                    imu_pantile
+                );
+
+                ctrl.pantile.Keep_Pantile(
+                    ctrl.pantile.set_yaw,
+                    CONTROL::PANTILE::YAW,
+                    imu_pantile
+                );
+            }
+            
             /*
              * 原世界角度保持逻辑不变。
              */
-            if (ctrl.mode == CONTROL::MANUAL_YAW)
+            else if (ctrl.mode == CONTROL::MANUAL_YAW)
             {
                 // 纯机械位置环测试时关闭世界角速度前馈
                 ctrl.pantile.yaw_speed_ff = 0.0f;
