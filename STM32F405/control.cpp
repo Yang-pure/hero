@@ -42,9 +42,9 @@ void CONTROL::Init(std::vector<Motor*> motor)
 
 void CONTROL::Control_Pantile(int32_t ch_yaw, int32_t ch_pitch)
 {
-	ch_pitch *= (-10.f);
+	ch_pitch *= (-5.f);
 	ch_yaw *= (1.f);//方向相反修改这里正负
-	float adjangle = this->pantile.sensitivity * 2;
+	float adjangle = this->pantile.sensitivity * 3;
 
 	ctrl.pantile.mark_pitch -= (float)(adjangle * ch_pitch);
 	ctrl.pantile.mark_yaw -= (float)(adjangle * ch_yaw);
@@ -223,7 +223,7 @@ void CONTROL::PANTILE::Update()
 	{
 		pitch_home = (float)pitch->sum_angle;
 		base_mark_pitch = pitch_home;
-		/*mark_pitch = pitch_home;*/
+		mark_pitch = pitch_home;
 		pitch_position_initialized = true;
 	}
 
@@ -250,20 +250,31 @@ void CONTROL::PANTILE::Update()
 	ctrl.pantile_motor[PANTILE::YAW]->setangle =
 		mark_yaw;
 
-	// Pitch 使用相对于上电 home 的连续位置限位
+	// Pitch 使用 IMU 绝对俯仰角软限位
 	if (pitch_position_initialized)
 	{
-		const float pitch_low =
-			pitch_home + para.pitch_min;
+		/*
+		 * 用云台 IMU 的绝对俯仰角做软限位。
+		 *
+		 * para.imu_pitch_min / para.imu_pitch_max 是实测到的
+		 * 丝杆最低点 / 最高点 IMU 角，代码内部再内缩
+		 * pitch_imu_margin 度，避免惯性撞到机械末端。
+		 */
+		const float pitch_imu = imu_pantile.GetAnglePitch();
+		const float imu_low = para.imu_pitch_min + pitch_imu_margin;
+		const float imu_high = para.imu_pitch_max - pitch_imu_margin;
 
-		const float pitch_high =
-			pitch_home + para.pitch_max;
+		/*
+		 * 把 IMU 限位误差换算成丝杆编码器目标。
+		 * 这样在限位处会把目标锁回当前 sum_angle，
+		 * 但反向打杆仍然允许云台朝中间运动。
+		 */
+		const float target_at_high = pitch->sum_angle
+			+ degreeToMechanical(imu_high - pitch_imu);
+		const float target_at_low = pitch->sum_angle
+			+ degreeToMechanical(imu_low - pitch_imu);
 
-		mark_pitch =
-			std::max(
-				std::min(mark_pitch, pitch_high),
-				pitch_low
-			);
+		mark_pitch = std::max(std::min(mark_pitch, target_at_high), target_at_low);
 
 		pitch->setangle = mark_pitch;
 	}

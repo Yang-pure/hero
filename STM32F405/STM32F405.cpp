@@ -49,8 +49,8 @@ Motor can2_motor[CAN2_MOTOR_NUM] = {
 		// 拨弹轮：采用参考发射工程参数
 	Motor(M3508, SPD, supply, ID5, PID(20.0f, 0.1f, 0.0f, 0.0f)),
 
-		// Pitch：采用已完成 Pitch 工程的双环 PID
-	Motor(M3508, POS, pantile, ID4, PID(20.0f, 0.0f, 1.5f, 0.0f), PID(0.25f, 0.0f, 0.0f, 0.1f))
+		// Pitch：采用压缩包 Pitch 工程的双环 PID
+	Motor(M3508, POS, pantile, ID4, PID(20.f, 0.06f, 1.5f, 0.f), PID(0.25f, 0.03f, 0.05f, 0.1f))
 };
 DMMOTOR DMmotor[4] = {
 	DMMOTOR(0x01, P_S, L_F),

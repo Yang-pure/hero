@@ -40,6 +40,7 @@ public:
 		// Pitch 连续位置基准
 		float pitch_home{};
 		bool pitch_position_initialized = false;
+		float pitch_imu_margin = 1.5f;  // IMU软限位回缩量，单位：度
 		// control.h
 		PID pantile_PID[3] = { {0.5f, 0.01f, 0.f}, {0.5f, 0.01f, 0.f}, {0.f, 0.f, 0.f} };
 		// 或

@@ -6,8 +6,8 @@
 PARAMETER& PARAMETER::Init()
 {
 	/*
-	 * Pitch 使用连续位置。
-	 * pitch_min/max 是相对于上电 home 的编码器偏移。
+	 * Pitch 限位已改为 IMU 绝对俯仰角。
+	 * pitch_min/max 暂不参与限位，保留原编码器偏移值备用。
 	 */
 	pitch_min = -90000;
 	pitch_max = 805000;
@@ -15,14 +15,14 @@ PARAMETER& PARAMETER::Init()
 	initial_pitch = 4096;
 	initial_yaw = 4900;
 
-	imu_pitch_max = 18;
-	imu_pitch_min = 16;
+	imu_pitch_max = 32.5;
+	imu_pitch_min = 0;
 
 	ace_speed = 1000;
 	max_speed = 3000;
 	rota_speed = 3000;
 
-	pitch_speed = 8;
+	pitch_speed = 100;
 	yaw_speed = 2;
 
 	return *this;
